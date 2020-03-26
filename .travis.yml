@@ -10,7 +10,10 @@ env:
 
 script: 
   - go build
-  - cd redirect-cli && go build -ldflags "-X main.version=$TRAVIS_BRANCH"
+  - cd redirect-cli 
+  - go build -ldflags "-X main.version=$TRAVIS_BRANCH"
+  - dir
+  - cd ..
 
 deploy:
   provider: releases
