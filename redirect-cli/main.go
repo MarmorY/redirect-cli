@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 
 	redirector "github.com/Neothorn23/redirecttoproxy"
@@ -34,6 +35,7 @@ func main() {
 	httpTargetPort := flag.Int("httpRedirectPort", defaultHTTPRedirectPort, "target port for redirected http connections")
 	httpsPort := flag.Int("httpsPort", defaultHTTPSPort, "source port for redirected http connections")
 	httpsTargetPort := flag.Int("httpsRedirectPort", defaultHTTPSRedirectPort, "target port for redirected http connections")
+	excludeNetworksStr := flag.String("exclude", "", "From redirection excluded networks")
 	debug := flag.Bool("v", false, "Verbose output")
 
 	flag.Parse()
@@ -56,12 +58,26 @@ func main() {
 		}
 	}
 
+	var excludedNetworks []*net.IPNet
+	if *excludeNetworksStr != "" {
+		var err error
+		excludedNetworks, err = parseNetworks(*excludeNetworksStr)
+		if err != nil {
+			fmt.Printf("Error parsing exclude networks: %s.\n", err)
+			flagsError = true
+		}
+	} else {
+		excludedNetworks = nil
+	}
+
 	if *httpPort <= 0 || *httpPort >= redirector.MaxTCPPort {
 		fmt.Printf("The value for httpPort should be between 1 an %d", redirector.MaxTCPPort-1)
+		flagsError = true
 	}
 
 	if *httpTargetPort <= 0 || *httpTargetPort >= redirector.MaxTCPPort {
 		fmt.Printf("The value for httpProxyPort should be between 1 an %d", redirector.MaxTCPPort-1)
+		flagsError = true
 	}
 
 	if flagsError {
@@ -81,14 +97,20 @@ func main() {
 	fmt.Printf("  https port        = %d\n", *httpsPort)
 	fmt.Printf("  https target port = %d\n", *httpsTargetPort)
 	fmt.Printf("  proxy address     = %s\n", *proxyAddress)
+	if excludedNetworks != nil {
+		fmt.Println("  excluded networks =")
+		for _, network := range excludedNetworks {
+			fmt.Printf("    %s\n", network)
+		}
+	}
 
-	httpRule, err := redirector.NewRedirectRule(*httpPort, *httpTargetPort, &redirectAddress, *proxyAddress, redirector.SendRedirectedHTTPConnectionToHTTPProxy)
+	httpRule, err := redirector.NewRedirectRule(*httpPort, *httpTargetPort, &redirectAddress, *proxyAddress, redirector.SendRedirectedHTTPConnectionToHTTPProxy, excludedNetworks)
 	if err != nil {
 		log.Errorf("Error creating http redirect rule: %s", err)
 		os.Exit(1)
 	}
 
-	httpsRule, err := redirector.NewRedirectRule(*httpsPort, *httpsTargetPort, &redirectAddress, *proxyAddress, redirector.SendRedirectedHTTPSConnectionToHTTPProxy)
+	httpsRule, err := redirector.NewRedirectRule(*httpsPort, *httpsTargetPort, &redirectAddress, *proxyAddress, redirector.SendRedirectedHTTPSConnectionToHTTPProxy, excludedNetworks)
 	if err != nil {
 		log.Errorf("Error creating https redirect rule: %s", err)
 		os.Exit(1)
@@ -116,6 +138,23 @@ func getOutboundIP() net.IP {
 	localAddr := conn.LocalAddr().(*net.UDPAddr)
 
 	return net.ParseIP(localAddr.IP.String())
+}
+
+func parseNetworks(networksStr string) ([]*net.IPNet, error) {
+
+	networkList := strings.Split(networksStr, ",")
+	result := make([]*net.IPNet, len(networkList))
+
+	for i, cidr := range networkList {
+		_, block, err := net.ParseCIDR(cidr)
+		if err != nil {
+			return nil, fmt.Errorf("parse error on %q: %v", cidr, err)
+		}
+		result[i] = block
+	}
+
+	return result, nil
+
 }
 
 func waitForCtrlC() {

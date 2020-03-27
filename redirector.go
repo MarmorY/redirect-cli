@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	privateIPBlocks []*net.IPNet
+	rivateIPBlocks []*net.IPNet
 )
 
 // Redirector manages and implements a group of RedirectRules
@@ -127,12 +127,14 @@ func (r *Redirector) checkAndRedirectHTTPPacket(wd *godivert.WinDivertHandle, pa
 }
 
 func redirectPacketToProxy(wd *godivert.WinDivertHandle, packet *godivert.Packet, srcPort uint16, originalDstIP net.IP, originalDstPort uint16, rule *RedirectRule) {
-	if !isPrivateIP(originalDstIP) {
+	if !isPrivateIP(originalDstIP) && !rule.isExcludedIP(originalDstIP) {
 		log.Debugf("Redirecting outgoing package from %s:%d to %s:%d", originalDstIP, originalDstPort, *rule.GetTargetIP(), rule.GetTargetPort())
 		rule.portToIPMapping[srcPort] = &originalDstIP
 		packet.SetDstPort(rule.GetTargetPort())
 		packet.SetDstIP(*rule.GetTargetIP())
 		wd.HelperCalcChecksum(packet)
+	} else {
+		log.Debugf("Don't redirect packet to %s:%d", originalDstIP, originalDstPort)
 	}
 }
 

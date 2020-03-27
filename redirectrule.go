@@ -12,11 +12,11 @@ type RedirectedConnectionHandler func(net.Conn, *RedirectRule) error
 
 // RedirectRule describes how to redirect IP packets
 type RedirectRule struct {
-	protocolPort uint16
-	targetPort   uint16
-	targetIP     *net.IP
-	excludedIPs  []*net.IP
-	proxyAddress string
+	protocolPort     uint16
+	targetPort       uint16
+	targetIP         *net.IP
+	excludedNetworks []*net.IPNet
+	proxyAddress     string
 
 	redirectedConnectionHandler RedirectedConnectionHandler
 	redirectListener            net.Listener
@@ -24,7 +24,8 @@ type RedirectRule struct {
 }
 
 // NewRedirectRule creates a new RedirectRule from provided arguments
-func NewRedirectRule(protocolPort, targetPort int, targetIP *net.IP, proxyAddress string, connectionHandler RedirectedConnectionHandler) (*RedirectRule, error) {
+func NewRedirectRule(protocolPort, targetPort int, targetIP *net.IP, proxyAddress string, connectionHandler RedirectedConnectionHandler, excludedNetworks []*net.IPNet) (*RedirectRule, error) {
+
 	rule := &RedirectRule{
 		protocolPort:                uint16(protocolPort),
 		targetPort:                  uint16(targetPort),
@@ -32,6 +33,7 @@ func NewRedirectRule(protocolPort, targetPort int, targetIP *net.IP, proxyAddres
 		proxyAddress:                proxyAddress,
 		redirectedConnectionHandler: connectionHandler,
 		portToIPMapping:             make([]*net.IP, MaxTCPPort),
+		excludedNetworks:            excludedNetworks,
 	}
 
 	return rule, nil
@@ -75,4 +77,15 @@ func (r *RedirectRule) listenForConnection() {
 		}
 	}
 
+}
+
+func (r *RedirectRule) isExcludedIP(ip net.IP) bool {
+	if r.excludedNetworks != nil {
+		for _, block := range r.excludedNetworks {
+			if block.Contains(ip) {
+				return true
+			}
+		}
+	}
+	return false
 }
