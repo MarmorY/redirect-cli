@@ -15,7 +15,7 @@ const (
 )
 
 var (
-	rivateIPBlocks []*net.IPNet
+	privateIPBlocks []*net.IPNet
 )
 
 // Redirector manages and implements a group of RedirectRules
